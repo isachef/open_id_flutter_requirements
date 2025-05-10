@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../blocs/auth_bloc.dart';
-import '../models/auth_state.dart';
+import 'package:open_id_flutter_app/features/auth/blocs/auth_bloc.dart';
+import 'package:open_id_flutter_app/features/auth/models/auth_state.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});

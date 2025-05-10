@@ -4,6 +4,7 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/auth_state.dart';
 import 'package:dio/dio.dart';
+import 'dart:async';
 
 class AuthBloc extends Cubit<AuthState> {
   final FlutterAppAuth _appAuth;
@@ -23,12 +24,70 @@ class AuthBloc extends Cubit<AuthState> {
     tokenEndpoint: 'https://demo.duendesoftware.com/connect/token',
     endSessionEndpoint: 'https://demo.duendesoftware.com/connect/endsession',
   );
+  Timer? _tokenRefreshTimer;
   AuthBloc({
     required FlutterAppAuth appAuth,
     required FlutterSecureStorage storage,
   }) : _appAuth = appAuth,
        _storage = storage,
        super(const Initial());
+
+  Future<void> _startTokenRefreshTimer() async {
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 5), (
+      timer,
+    ) async {
+      await this.refreshToken();
+    });
+  }
+
+  Future<void> refreshToken() async {
+    try {
+      final storedRefreshToken = await _storage.read(key: 'refresh_token');
+      if (storedRefreshToken == null) {
+        emit(const Error('Нет токена обновления'));
+        return;
+      }
+
+      final result = await _appAuth.token(
+        TokenRequest(
+          'interactive.public',
+          'com.duendesoftware.demo:/oauthredirect',
+          refreshToken: storedRefreshToken,
+          serviceConfiguration: _serviceConfiguration,
+        ),
+      );
+
+      if (result != null) {
+        await _storage.write(key: 'access_token', value: result.accessToken);
+        await _storage.write(key: 'id_token', value: result.idToken);
+        if (result.refreshToken != null) {
+          await _storage.write(
+            key: 'refresh_token',
+            value: result.refreshToken,
+          );
+        }
+
+        emit(
+          Authenticated(
+            accessToken: result.accessToken!,
+            idToken: result.idToken!,
+            refreshToken: result.refreshToken ?? storedRefreshToken,
+          ),
+        );
+
+        _startTokenRefreshTimer();
+      }
+    } catch (e) {
+      emit(Error('Ошибка при обновлении токена: ${e.toString()}'));
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _tokenRefreshTimer?.cancel();
+    return super.close();
+  }
 
   Future<void> login() async {
     try {
@@ -42,7 +101,7 @@ class AuthBloc extends Cubit<AuthState> {
               serviceConfiguration: _serviceConfiguration,
               scopes: _scopes,
               promptValues: ['login'],
-              allowInsecureConnections: true, 
+              allowInsecureConnections: true,
             ),
           );
 
@@ -58,6 +117,8 @@ class AuthBloc extends Cubit<AuthState> {
             refreshToken: result.refreshToken!,
           ),
         );
+
+        _startTokenRefreshTimer();
       } else {
         emit(const Error('Couldn\'t get tokens'));
       }
@@ -120,43 +181,30 @@ class AuthBloc extends Cubit<AuthState> {
     }
   }
 
-  Future<void> testapi() async {
-    try {
-      final accessToken = await _storage.read(key: 'access_token');
-
-      if (accessToken == null) {
-        emit(Error('Нет доступного токена для выполнения API запроса'));
-        return;
-      }
-
-      _dio.options.headers['Authorization'] = 'Bearer $accessToken';
-
-      final response = await _dio.get(
-        'https://demo.duendesoftware.com/api/test',
-      );
-
-      if (response.statusCode == 200) {
-        emit(ApiSuccess(response.data.toString()));
-      } else {
-        emit(Error('API запрос завершился с ошибкой: ${response.statusCode}'));
-      }
-    } catch (e) {
-      emit(Error('Ошибка при выполнении API запроса: ${e.toString()}'));
-    }
-  }
-
   Future<void> checkAuthStatus() async {
     try {
       final accessToken = await _storage.read(key: 'access_token');
       final idToken = await _storage.read(key: 'id_token');
-      final refreshToken = await _storage.read(key: 'refresh_token');
+      final storedRefreshToken = await _storage.read(key: 'refresh_token');
 
-      if (accessToken != null && idToken != null && refreshToken != null) {
+      if (accessToken != null &&
+          idToken != null &&
+          storedRefreshToken != null) {
+        try {
+          _dio.options.headers['Authorization'] = 'Bearer $accessToken';
+          await _dio.get('https://demo.duendesoftware.com/api/test');
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 401) {
+            await this.refreshToken();
+            return;
+          }
+        }
+
         emit(
           Authenticated(
             accessToken: accessToken,
             idToken: idToken,
-            refreshToken: refreshToken,
+            refreshToken: storedRefreshToken,
           ),
         );
       } else {
@@ -166,5 +214,4 @@ class AuthBloc extends Cubit<AuthState> {
       emit(Error(e.toString()));
     }
   }
-  
 }

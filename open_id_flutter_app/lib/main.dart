@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'blocs/auth_bloc.dart';
+import 'features/auth/blocs/auth_bloc.dart';
+import 'features/api/blocs/api_bloc.dart';
 import 'config/router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -18,10 +19,16 @@ class MyApp extends StatelessWidget {
     final appAuth = FlutterAppAuth();
     final storage = const FlutterSecureStorage();
 
-    return BlocProvider(
-      create:
-          (context) =>
-              AuthBloc(appAuth: appAuth, storage: storage)..checkAuthStatus(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create:
+              (context) =>
+                  AuthBloc(appAuth: appAuth, storage: storage)
+                    ..checkAuthStatus(),
+        ),
+        BlocProvider(create: (context) => ApiBloc(storage: storage)),
+      ],
       child: Builder(
         builder: (context) {
           return MaterialApp.router(

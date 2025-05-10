@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../blocs/auth_bloc.dart';
-import '../models/auth_state.dart';
+import '../features/auth/blocs/auth_bloc.dart';
+import '../features/auth/models/auth_state.dart';
 import '../screens/login_screen.dart';
 import '../screens/home_screen.dart';
 
@@ -19,7 +19,7 @@ GoRouter createRouter(BuildContext context) {
 
       final isLoginRoute = state.matchedLocation == '/login';
 
-      if (authState is Authenticated) {
+      if (authState is! Unauthenticated && authState is! Initial) {
         debugPrint(
           'Пользователь авторизован, перенаправление с $isLoginRoute на /',
         );

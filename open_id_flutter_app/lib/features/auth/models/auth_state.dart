@@ -31,9 +31,3 @@ class Error extends AuthState {
 class Unauthenticated extends AuthState {
   const Unauthenticated();
 }
-
-class ApiSuccess extends AuthState {
-  final String data;
-
-  const ApiSuccess(this.data);
-}
